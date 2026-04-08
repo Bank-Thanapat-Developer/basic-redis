@@ -18,6 +18,8 @@ func SetupRoutes(app *fiber.App, itemHandler *handlers.ItemHandler, refItemTypeH
 	items.Get("/list-with-redis", itemHandler.GetListItemsWithRedis)
 	items.Get("/list-with-out-redis", itemHandler.GetListItemsWithOutRedis)
 	items.Get("/:id", itemHandler.GetItemById)
+	items.Put("/:id", itemHandler.UpdateItem)
+	items.Delete("/:id", itemHandler.DeleteItem)
 
 	refItemTypes := v1.Group("/ref-item-types")
 	refItemTypes.Post("/", refItemTypeHandler.CreateRefItemType)

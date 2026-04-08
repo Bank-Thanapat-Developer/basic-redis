@@ -44,6 +44,11 @@ func (u *itemUsecase) Create(ctx context.Context, item dto.ItemCreateRequest) (i
 		return 0, err
 	}
 
+	// invalidate list cache เพราะมีข้อมูลใหม่เข้ามา
+	if err := u.cache.Delete(ctx, "items:list"); err != nil {
+		log.Println("failed to invalidate items:list cache:", err)
+	}
+
 	return itemData.ID, nil
 }
 
@@ -117,4 +122,46 @@ func (u *itemUsecase) GetListItems(ctx context.Context, useRedis bool) ([]dto.It
 	}
 
 	return response, nil
+}
+
+func (u *itemUsecase) Update(ctx context.Context, id string, req dto.ItemUpdateRequest) (*dto.ItemResponse, error) {
+	itemData := &entities.Item{
+		Name:          req.Name,
+		Price:         req.Price,
+		IsActive:      req.IsActive,
+		RefItemTypeID: req.RefItemTypeID,
+	}
+
+	if err := u.itemRepository.Update(ctx, id, itemData); err != nil {
+		return nil, err
+	}
+
+	// invalidate cache ของ item นี้ และ list cache
+	cacheKey := fmt.Sprintf("item:%s", id)
+	if err := u.cache.Delete(ctx, cacheKey); err != nil {
+		log.Println("failed to invalidate item cache:", err)
+	}
+	if err := u.cache.Delete(ctx, "items:list"); err != nil {
+		log.Println("failed to invalidate items:list cache:", err)
+	}
+
+	// ดึงข้อมูลล่าสุดกลับไป (cache จะถูก set ใหม่ใน GetItemById)
+	return u.GetItemById(ctx, id)
+}
+
+func (u *itemUsecase) Delete(ctx context.Context, id string) error {
+	if err := u.itemRepository.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	// invalidate cache ของ item นี้ และ list cache
+	cacheKey := fmt.Sprintf("item:%s", id)
+	if err := u.cache.Delete(ctx, cacheKey); err != nil {
+		log.Println("failed to invalidate item cache:", err)
+	}
+	if err := u.cache.Delete(ctx, "items:list"); err != nil {
+		log.Println("failed to invalidate items:list cache:", err)
+	}
+
+	return nil
 }

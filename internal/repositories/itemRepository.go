@@ -85,3 +85,25 @@ func (r *itemRepository) CountListItems(ctx context.Context) (int64, error) {
 	err := r.db.WithContext(ctx).Model(&entities.Item{}).Where("is_active = true").Count(&count).Error
 	return count, err
 }
+
+func (r *itemRepository) Update(ctx context.Context, id string, item *entities.Item) error {
+	result := r.db.WithContext(ctx).Model(&entities.Item{}).Where("id = ?", id).Updates(item)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("item not found")
+	}
+	return nil
+}
+
+func (r *itemRepository) Delete(ctx context.Context, id string) error {
+	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&entities.Item{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("item not found")
+	}
+	return nil
+}

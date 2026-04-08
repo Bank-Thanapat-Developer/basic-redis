@@ -73,3 +73,33 @@ func (h *ItemHandler) GetListItemsWithOutRedis(c fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusOK).JSON(items)
 }
+
+func (h *ItemHandler) UpdateItem(c fiber.Ctx) error {
+	id := c.Params("id")
+
+	var req dto.ItemUpdateRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
+	defer cancel()
+
+	item, err := h.itemUsecase.Update(ctx, id, req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.Status(fiber.StatusOK).JSON(item)
+}
+
+func (h *ItemHandler) DeleteItem(c fiber.Ctx) error {
+	id := c.Params("id")
+
+	ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
+	defer cancel()
+
+	if err := h.itemUsecase.Delete(ctx, id); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "deleted successfully"})
+}
