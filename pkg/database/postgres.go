@@ -20,6 +20,7 @@ func NewPostgresDB(cfg config.PostgresConfig) (*gorm.DB, error) {
 
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
+		&entities.User{},
 		&entities.RefItemType{},
 		&entities.Item{},
 	)

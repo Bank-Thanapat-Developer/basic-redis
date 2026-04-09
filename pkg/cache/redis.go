@@ -16,6 +16,10 @@ type CacheService interface {
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
 	GetObject(ctx context.Context, key string, value any) error
+	// Incr เพิ่มค่า counter แบบ atomic คืนค่าหลังเพิ่มแล้ว
+	Incr(ctx context.Context, key string) (int64, error)
+	// Expire ตั้ง TTL ให้ key ที่มีอยู่แล้ว
+	Expire(ctx context.Context, key string, ttl time.Duration) error
 }
 
 type redisCache struct {
@@ -67,4 +71,12 @@ func (r *redisCache) GetObject(ctx context.Context, key string, value any) error
 		return redis.Nil
 	}
 	return json.Unmarshal(bytes, value)
+}
+
+func (r *redisCache) Incr(ctx context.Context, key string) (int64, error) {
+	return r.client.Incr(ctx, key).Result()
+}
+
+func (r *redisCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	return r.client.Expire(ctx, key, ttl).Err()
 }

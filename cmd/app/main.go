@@ -14,13 +14,11 @@ import (
 )
 
 func main() {
-	// load config
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	// initialize postgres database
 	db, err := database.NewPostgresDB(cfg.Postgres)
 	if err != nil {
 		log.Fatalf("failed to connect postgres: %v", err)
@@ -30,11 +28,15 @@ func main() {
 		log.Fatalf("failed to auto migrate: %v", err)
 	}
 
-	// initialize redis client
 	cacheService, err := cache.NewRedisCache(cfg.Redis)
 	if err != nil {
 		log.Fatalf("failed to connect redis: %v", err)
 	}
+
+	// auth
+	userRepo := repositories.NewUserRepository(db)
+	authUsecase := usecases.NewAuthUsecase(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours)
+	authHandler := handlers.NewAuthHandler(authUsecase)
 
 	// item
 	itemRepo := repositories.NewItemRepository(db)
@@ -46,9 +48,16 @@ func main() {
 	refItemTypeUsecase := usecases.NewRefItemTypeUsecase(refItemTypeRepo)
 	refItemTypeHandler := handlers.NewRefItemTypeHandler(refItemTypeUsecase)
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		ProxyHeader: fiber.HeaderXForwardedFor,
+		TrustProxy:  true,
+		TrustProxyConfig: fiber.TrustProxyConfig{
+			Loopback: true,
+			Private:  true,
+		},
+	})
 
-	internal.SetupRoutes(app, itemHandler, refItemTypeHandler)
+	internal.SetupRoutes(app, cacheService, cfg.JWT.Secret, authHandler, itemHandler, refItemTypeHandler)
 
 	log.Printf("server starting on port %s", cfg.AppPort)
 	log.Fatal(app.Listen(":" + cfg.AppPort))
