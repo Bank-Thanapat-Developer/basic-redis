@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/Bank-Thanapat-Developer/basic-redis/internal/domains"
 	"github.com/Bank-Thanapat-Developer/basic-redis/internal/dto"
 	"github.com/Bank-Thanapat-Developer/basic-redis/internal/entities"
 	"github.com/Bank-Thanapat-Developer/basic-redis/pkg/cache"
+	"github.com/google/uuid"
 )
 
 type itemUsecase struct {
@@ -23,6 +25,19 @@ func NewItemUsecase(itemRepository domains.ItemRepository, cache cache.CacheServ
 }
 
 func (u *itemUsecase) Create(ctx context.Context, item dto.ItemCreateRequest) (int, error) {
+	// ล็อกตาม normalized name กัน race condition ระหว่าง check duplicate + insert
+	lockKey := fmt.Sprintf("lock:item:name:%s", strings.ToLower(strings.TrimSpace(item.Name)))
+	token := uuid.NewString()
+
+	if err := u.cache.AcquireLock(ctx, lockKey, token, 10*time.Second); err != nil {
+		return 0, err // ErrLocked หรือ error จาก Redis
+	}
+	defer func() {
+		if err := u.cache.ReleaseLock(ctx, lockKey, token); err != nil {
+			log.Println("failed to release create lock:", err)
+		}
+	}()
+
 	isDuplicate, err := u.itemRepository.CheckDuplicateName(ctx, item.Name)
 	if err != nil {
 		return 0, err
@@ -125,6 +140,34 @@ func (u *itemUsecase) GetListItems(ctx context.Context, useRedis bool) ([]dto.It
 }
 
 func (u *itemUsecase) Update(ctx context.Context, id string, req dto.ItemUpdateRequest) (*dto.ItemResponse, error) {
+	// ล็อกตาม item id กัน concurrent update บน record เดียวกัน
+	idLockKey := fmt.Sprintf("lock:item:update:id:%s", id)
+	token := uuid.NewString()
+
+	if err := u.cache.AcquireLock(ctx, idLockKey, token, 10*time.Second); err != nil {
+		return nil, err // ErrLocked
+	}
+	defer func() {
+		if err := u.cache.ReleaseLock(ctx, idLockKey, token); err != nil {
+			log.Println("failed to release update lock:", err)
+		}
+	}()
+
+	// ถ้าเปลี่ยนชื่อ ต้องล็อก name ด้วยเพื่อกัน race กับ create/update อื่นที่ใช้ชื่อเดียวกัน
+	if req.Name != "" {
+		nameLockKey := fmt.Sprintf("lock:item:name:%s", strings.ToLower(strings.TrimSpace(req.Name)))
+		nameToken := uuid.NewString()
+
+		if err := u.cache.AcquireLock(ctx, nameLockKey, nameToken, 10*time.Second); err != nil {
+			return nil, err // ErrLocked
+		}
+		defer func() {
+			if err := u.cache.ReleaseLock(ctx, nameLockKey, nameToken); err != nil {
+				log.Println("failed to release name lock:", err)
+			}
+		}()
+	}
+
 	itemData := &entities.Item{
 		Name:          req.Name,
 		Price:         req.Price,

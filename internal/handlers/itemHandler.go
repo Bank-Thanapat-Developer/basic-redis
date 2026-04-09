@@ -7,6 +7,7 @@ import (
 
 	"github.com/Bank-Thanapat-Developer/basic-redis/internal/domains"
 	"github.com/Bank-Thanapat-Developer/basic-redis/internal/dto"
+	"github.com/Bank-Thanapat-Developer/basic-redis/pkg/cache"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -30,8 +31,11 @@ func (h *ItemHandler) CreateItem(c fiber.Ctx) error {
 
 	id, err := h.itemUsecase.Create(ctx, item)
 	if err != nil {
-		if errors.Is(err, errors.New("name already exists")) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		if errors.Is(err, cache.ErrLocked) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "item is being created, please retry"})
+		}
+		if err.Error() == "name already exists" {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -87,6 +91,9 @@ func (h *ItemHandler) UpdateItem(c fiber.Ctx) error {
 
 	item, err := h.itemUsecase.Update(ctx, id, req)
 	if err != nil {
+		if errors.Is(err, cache.ErrLocked) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "item is being updated, please retry"})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.Status(fiber.StatusOK).JSON(item)

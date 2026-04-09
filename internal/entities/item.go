@@ -6,7 +6,7 @@ import (
 
 type Item struct {
 	ID            int        `json:"id"`
-	Name          string     `json:"name"`
+	Name          string     `json:"name" gorm:"uniqueIndex;not null"`
 	Price         int        `json:"price"`
 	IsActive      bool       `json:"is_active"`
 	RefItemTypeID int        `json:"ref_item_type_id"`
